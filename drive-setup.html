@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'">
+<meta name="theme-color" content="#14181f">
+<title>اتصال به گوگل درایو</title>
+<link rel="stylesheet" href="style.css">
+<script src="drive-setup.js" defer></script>
+</head>
+<body>
+<main class="setup">
+  <h1>اتصال اپ به گوگل درایو</h1>
+  <p class="muted">فقط یک بار لازم است و حدود ۵ دقیقه طول می‌کشد. با کامپیوتر راحت‌تر است. عکس‌ها در پوشه «Dst lubestation / pelak-khan» گوگل درایو خودتان ذخیره می‌شوند. رمز یا توکنی در گوشی وارد نمی‌شود.</p>
+
+  <ol>
+    <li>به <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> بروید و با همان حساب گوگلی وارد شوید که پوشه «Dst lubestation» در درایو آن است. یک پروژه جدید باز می‌شود.</li>
+    <li>همه متن داخل ویرایشگر را پاک کنید و کد پایین را جای آن بچسبانید. بعد دکمه ذخیره (💾) را بزنید.</li>
+    <li>در نوار بالا تابع <b dir="ltr">showCode</b> را انتخاب کنید و <b>Run</b> را بزنید. گوگل اجازه دسترسی به درایو را می‌پرسد: حساب خودتان را انتخاب کنید. اگر پیام «Google hasn't verified this app» آمد، <b>Advanced</b> و بعد <b>Go to … (unsafe)</b> را بزنید (اسکریپت مال خودتان است) و <b>Allow</b> را بزنید.</li>
+    <li>در پایین صفحه (Execution log) خطی با <b dir="ltr">Connection code for the app:</b> می‌آید. آن کد را کپی کنید.</li>
+    <li>بالا سمت راست <b>Deploy</b> و بعد <b>New deployment</b> را بزنید. کنار Select type چرخ‌دنده را بزنید و <b>Web app</b> را انتخاب کنید.
+      <ul>
+        <li><b dir="ltr">Execute as:</b> Me</li>
+        <li><b dir="ltr">Who has access:</b> Anyone</li>
+      </ul>
+      بعد <b>Deploy</b> را بزنید و <b>Web app URL</b> را کپی کنید (با <span dir="ltr">/exec</span> تمام می‌شود).</li>
+    <li>در اپ پلاک‌خوان ⚙ را بزنید. لینک را در «لینک اسکریپت گوگل» و کد را در «کد اتصال» بچسبانید. «آزمایش اتصال» و بعد «ذخیره» را بزنید.</li>
+  </ol>
+
+  <p class="muted">«Anyone» فقط یعنی درخواست به اسکریپت برسد. بدون کد اتصال هیچ چیزی خوانده یا نوشته نمی‌شود. اگر گوشی گم شد، در اسکریپت تابع <b dir="ltr">resetCode</b> را اجرا کنید و کد تازه را در گوشی‌های دیگر وارد کنید.</p>
+
+  <h2>کد اسکریپت</h2>
+  <button id="copyBtn" type="button" class="big-btn primary">کپی کد</button>
+  <p id="copyMsg" class="muted"></p>
+  <textarea id="code" readonly dir="ltr" spellcheck="false" rows="14"></textarea>
+
+  <p><a href="./">بازگشت به اپ</a></p>
+</main>
+</body>
+</html>

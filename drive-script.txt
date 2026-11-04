@@ -1,0 +1,241 @@
+/**
+ * pelak-khan: receives photos from the phone app and saves them in your Google Drive,
+ * in the folder «Dst lubestation / pelak-khan». Runs in your own Google account.
+ *
+ * One-time setup (README of the phone app, «اتصال به گوگل درایو»):
+ *   1. script.google.com -> New project, paste this file, save.
+ *   2. Run `setup` once and allow access. The log shows the connection code.
+ *   3. Deploy -> New deployment -> Web app; Execute as: Me; Who has access: Anyone.
+ *   4. In the app's settings paste the Web app URL and the connection code.
+ *
+ * The laptop (the central system) uses the same URL and code to list and download the
+ * photos into its database; the photos stay in Drive as a backup.
+ *
+ * "Anyone" only lets the request reach this script; every request must carry the
+ * connection code, otherwise nothing is read or written.
+ */
+
+const ROOT_PATH = ['Dst lubestation', 'pelak-khan'];
+// The existing «pelak-khan» folder in hani.vahabi@gmail.com's Drive. Empty = find or create
+// ROOT_PATH from My Drive (for another account).
+const FOLDER_ID = '12oR-t_TI5lrY1yNJqyqhkNbOAXvtNtYW';
+const INDEX_PATH = 'index/labels.json';
+const MAX_FILES = 60; // per request; the app sends 10 photos (up to 30 files) at a time
+
+function setup() {
+  const props = PropertiesService.getScriptProperties();
+  let key = props.getProperty('KEY');
+  if (!key) {
+    key = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+    props.setProperty('KEY', key);
+  }
+  Logger.log('Folder ready: ' + rootFolder_().getName());
+  // the code is not logged here: sendLinks emails it, showCode prints it for typing by hand
+  Logger.log('Connection code saved. Run sendLinks after deploying (or showCode to see the code).');
+}
+
+/** Prints the connection code, for typing it into the app by hand instead of using sendLinks. */
+function showCode() {
+  setup();
+  Logger.log('Connection code for the app: ' + PropertiesService.getScriptProperties().getProperty('KEY'));
+}
+
+// Paste the Web app URL from Deploy -> Manage deployments here: getUrl() gives the /dev
+// address when sendLinks runs from the editor, and phones need the /exec one.
+const WEB_APP_URL = '';
+const APP_URL = 'https://hani-ir.github.io/pelak-khan-app/';
+const PANEL_URL = 'http://localhost:8000/';
+
+/**
+ * After Deploy -> New deployment -> Web app: emails you two links that connect the phone app
+ * and the laptop panel to this script, so nothing has to be typed. The links carry the
+ * connection code: they go only to your own address.
+ */
+function sendLinks() {
+  setup();
+  const key = PropertiesService.getScriptProperties().getProperty('KEY');
+  const url = WEB_APP_URL || ScriptApp.getService().getUrl();
+  if (!url || !/\/exec$/.test(url)) throw new Error('First Deploy -> New deployment -> Web app (Who has access: Anyone), then run sendLinks again. URL: ' + url);
+  const payload = Utilities.base64EncodeWebSafe(Utilities.newBlob(JSON.stringify({ u: url, k: key })).getBytes()).replace(/=+$/, '');
+  const phone = APP_URL + '#connect=' + payload;
+  const laptop = PANEL_URL + '#/system?connect=' + payload;
+  const to = Session.getEffectiveUser().getEmail();
+  MailApp.sendEmail({
+    to: to,
+    subject: 'اتصال پلاک‌خوان به گوگل درایو',
+    htmlBody: '<div dir="rtl" style="font-family:Tahoma,sans-serif;line-height:2">'
+      + '<p><b>گوشی:</b> این ایمیل را روی گوشی باز کنید و این لینک را بزنید:<br><a href="' + phone + '">اتصال اپ پلاک‌خوان</a></p>'
+      + '<p><b>لپ‌تاپ:</b> روی لپ‌تاپی که پلاک‌خوان روی آن نصب است، این لینک را باز کنید:<br><a href="' + laptop + '">اتصال پنل لپ‌تاپ</a></p>'
+      + '<p style="color:#888">این لینک‌ها کد اتصال را دارند؛ آن‌ها را برای کسی نفرستید. اگر گوشی گم شد، در اسکریپت resetCode و بعد sendLinks را اجرا کنید.</p></div>',
+  });
+  Logger.log('Links sent to ' + to + ' for ' + url);
+}
+
+/** Makes a new connection code; phones with the old code stop sending until updated. */
+function resetCode() {
+  PropertiesService.getScriptProperties().deleteProperty('KEY');
+  setup();
+}
+
+function doGet() {
+  return json_({ ok: true, app: 'pelak-khan' }); // says nothing about the data
+}
+
+function doPost(e) {
+  let req;
+  try {
+    req = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return json_({ ok: false, error: 'bad_request' });
+  }
+  if (!keyOk_(req.key)) return json_({ ok: false, error: 'bad_key' });
+  try {
+    if (req.action === 'ping') return json_({ ok: true, folder: ROOT_PATH.join(' / ') });
+    if (req.action === 'index') return json_({ ok: true, index: readIndex_() });
+    if (req.action === 'upload') return json_(upload_(req));
+    if (req.action === 'list') return json_(list_(req));
+    if (req.action === 'get') return json_(get_(req));
+    return json_({ ok: false, error: 'bad_request' });
+  } catch (err) {
+    console.error(err);
+    return json_({ ok: false, error: 'server', message: String(err && err.message || err) });
+  }
+}
+
+// files: [{path, type, data (base64)}]; labels: index entries to add (by id).
+function upload_(req) {
+  const files = req.files || [];
+  if (!Array.isArray(files) || files.length > MAX_FILES) return { ok: false, error: 'bad_request' };
+  const root = rootFolder_();
+  for (const f of files) {
+    const parts = safePath_(f.path);
+    if (!parts) return { ok: false, error: 'bad_request' };
+    const name = parts.pop();
+    const folder = subFolder_(root, parts);
+    // a retry after a lost answer sends the same names again: keep the first copy
+    if (folder.getFilesByName(name).hasNext()) continue;
+    folder.createFile(Utilities.newBlob(Utilities.base64Decode(f.data), f.type || 'application/octet-stream', name));
+  }
+  let index = null;
+  if (Array.isArray(req.labels)) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000); // two phones sending at once must not lose each other's labels
+    try {
+      index = readIndex_();
+      const have = new Set(index.items.map((x) => x.id));
+      for (const it of req.labels) if (it && it.id && !have.has(it.id)) index.items.push(it);
+      writeIndex_(index);
+    } finally {
+      lock.releaseLock();
+    }
+  }
+  return { ok: true, saved: files.length, index };
+}
+
+// Photo sets saved after `since` (ISO time), oldest first: [{base, folder, saved_at, info, files}].
+// The caller keeps the last saved_at as its cursor and asks again; sets saved in the same
+// millisecond may come twice, so the caller must ignore ids it already has.
+function list_(req) {
+  const since = req.since ? new Date(req.since) : new Date(0);
+  const limit = Math.min(Number(req.limit) || 100, 200);
+  const out = [];
+  const photos = rootFolder_().getFoldersByName('photos');
+  if (!photos.hasNext()) return { ok: true, items: [] };
+  const models = photos.next().getFolders();
+  while (models.hasNext()) {
+    const folder = models.next();
+    const names = new Map();
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      names.set(f.getName(), f);
+    }
+    for (const [name, f] of names) {
+      if (!name.endsWith('.json') || f.getDateCreated() < since) continue;
+      const base = name.slice(0, -5);
+      const set = {};
+      for (const kind of ['full', 'plate']) {
+        for (const ext of ['webp', 'jpg']) {
+          if (names.has(`${base}_${kind}.${ext}`)) set[kind] = `photos/${folder.getName()}/${base}_${kind}.${ext}`;
+        }
+      }
+      let info = null;
+      try { info = JSON.parse(f.getBlob().getDataAsString('UTF-8')); } catch (err) { continue; }
+      out.push({ base, folder: folder.getName(), saved_at: f.getDateCreated().toISOString(), info, files: set });
+    }
+  }
+  out.sort((a, b) => a.saved_at.localeCompare(b.saved_at));
+  return { ok: true, items: out.slice(0, limit), more: out.length > limit };
+}
+
+// One file by its path inside the pelak-khan folder, as base64.
+function get_(req) {
+  const parts = safePath_(req.path);
+  if (!parts) return { ok: false, error: 'bad_request' };
+  const name = parts.pop();
+  let folder = rootFolder_();
+  for (const p of parts) {
+    const it = folder.getFoldersByName(p);
+    if (!it.hasNext()) return { ok: false, error: 'not_found' };
+    folder = it.next();
+  }
+  const it = folder.getFilesByName(name);
+  if (!it.hasNext()) return { ok: false, error: 'not_found' };
+  const blob = it.next().getBlob();
+  return { ok: true, type: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
+}
+
+function keyOk_(given) {
+  const key = PropertiesService.getScriptProperties().getProperty('KEY');
+  if (!key || typeof given !== 'string' || given.length !== key.length) return false;
+  let diff = 0;
+  for (let i = 0; i < key.length; i++) diff |= key.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
+
+// "photos/Pilsan_C7-480/x_full.jpg" -> parts; refuses empty, "." and ".." parts.
+function safePath_(path) {
+  if (typeof path !== 'string' || path.length > 300) return null;
+  const parts = path.split('/');
+  if (parts.some((p) => !p || p === '.' || p === '..' || !/^[A-Za-z0-9._-]+$/.test(p))) return null;
+  return parts;
+}
+
+function rootFolder_() {
+  if (FOLDER_ID) return DriveApp.getFolderById(FOLDER_ID);
+  let folder = DriveApp.getRootFolder();
+  for (const name of ROOT_PATH) folder = child_(folder, name);
+  return folder;
+}
+
+function subFolder_(folder, names) {
+  for (const name of names) folder = child_(folder, name);
+  return folder;
+}
+
+function child_(folder, name) {
+  const it = folder.getFoldersByName(name);
+  return it.hasNext() ? it.next() : folder.createFolder(name);
+}
+
+function indexFile_(create) {
+  const parts = INDEX_PATH.split('/');
+  const name = parts.pop();
+  const folder = subFolder_(rootFolder_(), parts);
+  const it = folder.getFilesByName(name);
+  if (it.hasNext()) return it.next();
+  return create ? folder.createFile(name, JSON.stringify({ version: 1, items: [] }), 'application/json') : null;
+}
+
+function readIndex_() {
+  const file = indexFile_(false);
+  return file ? JSON.parse(file.getBlob().getDataAsString('UTF-8')) : { version: 1, items: [] };
+}
+
+function writeIndex_(index) {
+  indexFile_(true).setContent(JSON.stringify(index));
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}

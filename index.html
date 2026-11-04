@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self' https://script.google.com https://script.googleusercontent.com; img-src 'self' blob: data:; style-src 'self'; font-src 'self'; worker-src 'self' blob:">
+<meta name="theme-color" content="#14181f">
+<title>پلاک‌خوان</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+<script src="lib/ort.wasm.min.js" defer></script>
+<script src="lib/opencv.js" defer></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand"><strong>پلاک‌خوان</strong><span>LUBESTATION</span></div>
+  <button id="settingsBtn" class="icon-btn" aria-label="تنظیمات">⚙</button>
+</header>
+
+<p id="status" class="status" role="status">در حال آماده‌سازی…</p>
+<p id="queueInfo" class="queue" hidden></p>
+
+<main>
+  <section id="home">
+    <label class="big-btn primary">
+      عکس بگیر
+      <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
+    </label>
+    <label class="big-btn">
+      انتخاب از گالری (یک یا چند عکس)
+      <input id="galleryInput" type="file" accept="image/*" multiple hidden>
+    </label>
+    <p class="muted center">چند عکس از یک مدل، با رنگ، پلاک یا زاویه‌های مختلف؟ همه را با هم از گالری انتخاب کنید تا یک‌جا در پوشه همان مدل ذخیره شوند.</p>
+    <button id="statsBtn" class="link-btn" type="button">عکس‌های ذخیره‌شده</button>
+  </section>
+
+  <section id="result" hidden>
+    <img id="preview" alt="عکس خودرو">
+    <div id="batchCard" class="card" hidden>
+      <h2 id="batchTitle"></h2>
+      <div id="batchList" class="batch-list"></div>
+    </div>
+    <div id="plateCard" class="card">
+      <h2>پلاک</h2>
+      <img id="plateImg" alt="پلاک" hidden>
+      <p id="plateHint" class="muted"></p>
+      <input id="plateInput" class="plate-input" inputmode="text" autocomplete="off" placeholder="مثلاً ۱۲ب۳۶۵۱۱">
+      <p id="plateCheck" class="muted"></p>
+    </div>
+    <div class="card">
+      <h2>مدل خودرو</h2>
+      <p id="modelChosen" class="chosen"></p>
+      <p id="modelGuess" class="muted"></p>
+      <div id="altModels" class="alt-models"></div>
+      <input id="modelSearch" type="search" placeholder="جستجو: پیلسان، FH، 480…" autocomplete="off">
+      <div id="modelList" class="model-list"></div>
+      <button id="unknownBtn" type="button" class="small-btn">نمی‌دانم (نامشخص)</button>
+    </div>
+    <div class="card">
+      <h2>یادداشت (اختیاری)</h2>
+      <input id="noteInput" maxlength="200" placeholder="مثلاً رنگ کابین، محل عکس">
+    </div>
+    <div class="actions">
+      <button id="saveBtn" type="button" class="big-btn primary">تأیید و ذخیره</button>
+      <button id="cancelBtn" type="button" class="big-btn">انصراف</button>
+    </div>
+  </section>
+
+  <section id="stats" hidden>
+    <h2>عکس‌های ذخیره‌شده</h2>
+    <p id="statsSummary" class="muted"></p>
+    <table id="statsTable"><thead><tr><th>مدل</th><th>تعداد</th></tr></thead><tbody></tbody></table>
+    <button id="sendNowBtn" type="button" class="big-btn">ارسال الان</button>
+    <button id="backBtn" type="button" class="big-btn">بازگشت</button>
+  </section>
+</main>
+
+<dialog id="settingsDlg">
+  <form method="dialog">
+    <h2>تنظیمات</h2>
+    <label>لینک اسکریپت گوگل
+      <input id="driveUrlInput" dir="ltr" autocomplete="off" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec">
+    </label>
+    <label>کد اتصال
+      <input id="driveKeyInput" type="password" dir="ltr" autocomplete="off" placeholder="از گزارش اجرای setup">
+    </label>
+    <p class="muted">هر دو را یک بار از اسکریپت گوگل خودتان کپی کنید (<a href="drive-setup.html" target="_blank">راهنمای راه‌اندازی</a>). فقط روی همین گوشی ذخیره می‌شوند. عکس‌ها در پوشه «Dst lubestation / pelak-khan» گوگل درایو خودتان ذخیره می‌شوند.</p>
+    <label>نام این گوشی
+      <input id="deviceInput" maxlength="30" placeholder="مثلاً گوشی هانی">
+    </label>
+    <p id="settingsMsg" class="muted"></p>
+    <div class="actions">
+      <button id="testBtn" type="button" class="small-btn">آزمایش اتصال</button>
+      <button id="saveSettingsBtn" value="save" class="small-btn primary">ذخیره</button>
+      <button value="cancel" class="small-btn">بستن</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<button id="updateBar" type="button" class="update-bar" hidden>نسخه جدید آماده است، بزنید تا باز شود</button>
+</body>
+</html>
